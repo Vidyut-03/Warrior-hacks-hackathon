@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poverty in Texas counties</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#EEF1F3;--panel:#fff;--ink:#16212B;--muted:#5B6A77;--line:#D5DCE1;--hl:#16212B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 "Instrument Sans",system-ui,sans-serif}
+header{padding:28px 32px 8px;max-width:1400px;margin:auto}
+h1{font:700 clamp(1.7rem,3.2vw,2.5rem)/1.05 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.025em;margin:0 0 6px}
+header p{margin:0;color:var(--muted);max-width:60ch}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:20px;max-width:1400px;margin:auto;padding:16px 32px 32px}
+.card,.mapwrap{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.mapwrap{padding:14px;position:relative}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.tabs button{font:500 14px "Instrument Sans",sans-serif;padding:7px 13px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+button:focus-visible,input:focus-visible{outline:3px solid #4A93A5;outline-offset:2px}
+#measure{font-weight:600;margin:6px 2px 0}
+#map{width:100%;height:auto;display:block;cursor:grab;touch-action:none}
+#map:active{cursor:grabbing}
+.county{stroke:#fff;stroke-width:.6px;vector-effect:non-scaling-stroke;cursor:pointer}
+.county:hover{stroke:var(--ink);stroke-width:1.4px}
+.county.sel{stroke:var(--hl);stroke-width:2.6px}
+.dot{fill:#fff;stroke:var(--ink);stroke-width:1px;vector-effect:non-scaling-stroke;cursor:pointer}
+.dot:hover{stroke-width:3px}
+.dot.sel{fill:var(--ink)}
+.border{fill:none;stroke:var(--ink);stroke-width:1.6px;vector-effect:non-scaling-stroke;pointer-events:none}
+#reset{position:absolute;right:20px;top:62px;font:500 13px "Instrument Sans",sans-serif;background:#fff;border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+#legend{margin:6px 4px 0;max-width:460px}
+.sw{display:flex;height:12px}.sw i{flex:1}
+.lb{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:3px}
+.note{font-size:12.5px;color:var(--muted);margin:10px 2px 0}
+aside{display:flex;flex-direction:column;gap:16px}
+.card{padding:16px}
+.card h2{font:700 1.15rem "Bricolage Grotesque",sans-serif;margin:0 0 10px;letter-spacing:-.01em}
+label{font-weight:600;display:block;margin-bottom:6px}
+input{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:6px}
+.hint{color:var(--muted);margin:0}
+.row{padding:9px 0;border-top:1px solid var(--line)}
+.rl{font-size:13px;color:var(--muted)}
+.rv{font:700 1.45rem "Bricolage Grotesque",sans-serif;letter-spacing:-.01em}
+.bar{height:5px;background:#E4E9ED;border-radius:3px;margin:4px 0}
+.bar i{display:block;height:100%;background:var(--ink);border-radius:3px}
+.rk{font-size:12.5px;color:var(--muted)}
+ol{list-style:none;margin:0;padding:0}
+ol button{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;width:100%;padding:6px 4px;border-top:1px solid var(--line);cursor:pointer}
+ol button:hover{background:#F2F5F7}
+ol button:focus-visible{outline:3px solid #4A93A5}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:#fff;padding:5px 9px;border-radius:5px;font-size:13px;display:none;z-index:9}
+@media(max-width:940px){.app{grid-template-columns:1fr;padding:12px}header{padding:20px 14px 4px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Poverty in all 254 Texas counties</h1>
+  <p>Census SAIPE 2024 estimates. Choose a measure, then click any county or its dot. Scroll to zoom, drag to pan.</p>
+</header>
+<main class="app">
+  <section class="mapwrap">
+    <div class="tabs" id="tabs"></div>
+    <div id="measure"></div>
+    <button id="reset" type="button">Reset view</button>
+    <svg id="map" viewBox="0 0 900 860" role="img" aria-label="Choropleth map of Texas counties"></svg>
+    <div id="legend"></div>
+    <p class="note">Estimates have margins of error, and small counties are the noisiest. Dots mark each county's center.</p>
+  </section>
+  <aside>
+    <div class="card">
+      <label for="q">Find a county</label>
+      <input id="q" list="names" placeholder="Start typing, e.g. Webb" autocomplete="off">
+      <datalist id="names"></datalist>
+    </div>
+    <div class="card" id="detail"><p class="hint">Select a county on the map to see its numbers.</p></div>
+    <div class="card"><h2 id="listTitle"></h2><ol id="list"></ol></div>
+  </aside>
+</main>
+<div id="tip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script>
+const DATA = [{"fips":"48001","name":"Anderson County","n":9083,"pov":20.0,"c017":23.5,"c517":22.0,"inc":57927},{"fips":"48003","name":"Andrews County","n":1975,"pov":10.5,"c017":12.9,"c517":12.2,"inc":89424},{"fips":"48005","name":"Angelina County","n":10930,"pov":12.7,"c017":18.8,"c517":18.0,"inc":62937},{"fips":"48007","name":"Aransas County","n":3593,"pov":14.3,"c017":27.1,"c517":25.6,"inc":67768},{"fips":"48009","name":"Archer County","n":838,"pov":9.2,"c017":9.5,"c517":8.9,"inc":79806},{"fips":"48011","name":"Armstrong County","n":178,"pov":10.1,"c017":15.8,"c517":15.5,"inc":77908},{"fips":"48013","name":"Atascosa County","n":8286,"pov":15.9,"c017":23.7,"c517":25.1,"inc":66244},{"fips":"48015","name":"Austin County","n":3576,"pov":11.1,"c017":16.4,"c517":16.0,"inc":74343},{"fips":"48017","name":"Bailey County","n":1075,"pov":15.6,"c017":26.1,"c517":27.1,"inc":61259},{"fips":"48019","name":"Bandera County","n":2502,"pov":11.0,"c017":17.9,"c517":16.6,"inc":76716},{"fips":"48021","name":"Bastrop County","n":10781,"pov":9.6,"c017":14.1,"c517":13.2,"inc":84174},{"fips":"48023","name":"Baylor County","n":557,"pov":16.1,"c017":23.6,"c517":23.1,"inc":54002},{"fips":"48025","name":"Bee County","n":5529,"pov":24.2,"c017":27.2,"c517":26.2,"inc":56414},{"fips":"48027","name":"Bell County","n":53772,"pov":13.8,"c017":18.9,"c517":17.1,"inc":69108},{"fips":"48029","name":"Bexar County","n":304387,"pov":14.6,"c017":18.0,"c517":17.1,"inc":72578},{"fips":"48031","name":"Blanco County","n":1068,"pov":8.0,"c017":11.2,"c517":11.1,"inc":97321},{"fips":"48033","name":"Borden County","n":57,"pov":10.2,"c017":10.1,"c517":8.9,"inc":96586},{"fips":"48035","name":"Bosque County","n":2713,"pov":14.5,"c017":18.2,"c517":17.1,"inc":64319},{"fips":"48037","name":"Bowie County","n":14070,"pov":16.2,"c017":22.7,"c517":22.2,"inc":62559},{"fips":"48039","name":"Brazoria County","n":36465,"pov":9.1,"c017":11.4,"c517":9.7,"inc":100255},{"fips":"48041","name":"Brazos County","n":50404,"pov":22.1,"c017":17.5,"c517":15.9,"inc":61938},{"fips":"48043","name":"Brewster County","n":1351,"pov":15.1,"c017":18.0,"c517":17.4,"inc":63982},{"fips":"48045","name":"Briscoe County","n":219,"pov":14.7,"c017":23.2,"c517":22.1,"inc":61395},{"fips":"48047","name":"Brooks County","n":1900,"pov":30.6,"c017":44.7,"c517":43.2,"inc":39409},{"fips":"48049","name":"Brown County","n":6179,"pov":16.7,"c017":24.5,"c517":22.6,"inc":60291},{"fips":"48051","name":"Burleson County","n":2739,"pov":13.7,"c017":21.0,"c517":18.6,"inc":70451},{"fips":"48053","name":"Burnet County","n":5037,"pov":9.2,"c017":14.0,"c517":13.3,"inc":78699},{"fips":"48055","name":"Caldwell County","n":5967,"pov":11.8,"c017":16.9,"c517":16.0,"inc":70980},{"fips":"48057","name":"Calhoun County","n":2847,"pov":14.5,"c017":19.3,"c517":19.0,"inc":69077},{"fips":"48059","name":"Callahan County","n":1658,"pov":11.5,"c017":16.1,"c517":16.4,"inc":67065},{"fips":"48061","name":"Cameron County","n":103609,"pov":24.3,"c017":33.2,"c517":31.0,"inc":52973},{"fips":"48063","name":"Camp County","n":2057,"pov":15.7,"c017":24.7,"c517":24.3,"inc":63333},{"fips":"48065","name":"Carson County","n":548,"pov":9.5,"c017":11.6,"c517":10.6,"inc":81564},{"fips":"48067","name":"Cass County","n":4650,"pov":16.5,"c017":21.5,"c517":20.7,"inc":52449},{"fips":"48069","name":"Castro County","n":1212,"pov":16.7,"c017":21.9,"c517":21.3,"inc":66616},{"fips":"48071","name":"Chambers County","n":4403,"pov":7.9,"c017":9.9,"c517":9.5,"inc":106175},{"fips":"48073","name":"Cherokee County","n":8144,"pov":16.0,"c017":20.4,"c517":19.0,"inc":59341},{"fips":"48075","name":"Childress County","n":1073,"pov":20.0,"c017":23.8,"c517":22.8,"inc":57509},{"fips":"48077","name":"Clay County","n":1166,"pov":11.0,"c017":15.3,"c517":14.5,"inc":74944},{"fips":"48079","name":"Cochran County","n":531,"pov":20.8,"c017":31.1,"c517":33.9,"inc":52164},{"fips":"48081","name":"Coke County","n":492,"pov":15.0,"c017":21.3,"c517":21.3,"inc":55835},{"fips":"48083","name":"Coleman County","n":1488,"pov":18.8,"c017":28.2,"c517":27.9,"inc":52648},{"fips":"48085","name":"Collin County","n":70944,"pov":5.7,"c017":6.1,"c517":5.6,"inc":124920},{"fips":"48087","name":"Collingsworth County","n":432,"pov":16.6,"c017":25.2,"c517":22.9,"inc":55421},{"fips":"48089","name":"Colorado County","n":2813,"pov":13.4,"c017":20.7,"c517":19.8,"inc":66938},{"fips":"48091","name":"Comal County","n":13723,"pov":6.9,"c017":8.8,"c517":8.5,"inc":109427},{"fips":"48093","name":"Comanche County","n":2056,"pov":14.5,"c017":21.7,"c517":22.0,"inc":58941},{"fips":"48095","name":"Concho County","n":499,"pov":22.0,"c017":23.0,"c517":23.4,"inc":57030},{"fips":"48097","name":"Cooke County","n":4855,"pov":11.2,"c017":15.3,"c517":14.6,"inc":77501},{"fips":"48099","name":"Coryell County","n":10707,"pov":14.6,"c017":18.0,"c517":19.1,"inc":64049},{"fips":"48101","name":"Cottle County","n":239,"pov":19.0,"c017":36.1,"c517":31.4,"inc":57388},{"fips":"48103","name":"Crane County","n":510,"pov":11.4,"c017":15.7,"c517":14.8,"inc":77653},{"fips":"48105","name":"Crockett County","n":403,"pov":14.7,"c017":19.3,"c517":18.1,"inc":59395},{"fips":"48107","name":"Crosby County","n":1051,"pov":21.2,"c017":34.8,"c517":35.3,"inc":49096},{"fips":"48109","name":"Culberson County","n":409,"pov":18.2,"c017":28.2,"c517":27.6,"inc":64099},{"fips":"48111","name":"Dallam County","n":875,"pov":11.7,"c017":16.0,"c517":17.3,"inc":63621},{"fips":"48113","name":"Dallas County","n":328986,"pov":12.5,"c017":17.2,"c517":16.0,"inc":78910},{"fips":"48115","name":"Dawson County","n":2040,"pov":20.1,"c017":26.1,"c517":26.6,"inc":58227},{"fips":"48117","name":"Deaf Smith County","n":3068,"pov":16.8,"c017":23.4,"c517":22.5,"inc":61990},{"fips":"48119","name":"Delta County","n":816,"pov":14.6,"c017":23.3,"c517":24.1,"inc":63985},{"fips":"48121","name":"Denton County","n":64177,"pov":6.2,"c017":7.0,"c517":6.4,"inc":117499},{"fips":"48123","name":"DeWitt County","n":3405,"pov":18.5,"c017":23.2,"c517":22.1,"inc":63383},{"fips":"48125","name":"Dickens County","n":306,"pov":17.8,"c017":24.8,"c517":23.7,"inc":52796},{"fips":"48127","name":"Dimmit County","n":2271,"pov":28.5,"c017":35.9,"c517":36.5,"inc":49127},{"fips":"48129","name":"Donley County","n":500,"pov":17.2,"c017":25.6,"c517":23.9,"inc":51408},{"fips":"48131","name":"Duval County","n":2188,"pov":24.8,"c017":36.8,"c517":37.9,"inc":45438},{"fips":"48133","name":"Eastland County","n":3238,"pov":18.5,"c017":26.7,"c517":26.7,"inc":54528},{"fips":"48135","name":"Ector County","n":24813,"pov":14.8,"c017":18.6,"c517":16.6,"inc":75887},{"fips":"48137","name":"Edwards County","n":262,"pov":19.2,"c017":31.8,"c517":32.5,"inc":57450},{"fips":"48139","name":"Ellis County","n":17258,"pov":7.5,"c017":9.6,"c517":9.3,"inc":99726},{"fips":"48141","name":"El Paso County","n":155360,"pov":18.1,"c017":23.4,"c517":23.0,"inc":59883},{"fips":"48143","name":"Erath County","n":6056,"pov":14.9,"c017":16.0,"c517":15.4,"inc":65488},{"fips":"48145","name":"Falls County","n":2921,"pov":18.7,"c017":24.0,"c517":23.7,"inc":56486},{"fips":"48147","name":"Fannin County","n":4494,"pov":12.8,"c017":17.2,"c517":15.0,"inc":70819},{"fips":"48149","name":"Fayette County","n":2555,"pov":10.2,"c017":14.7,"c517":13.9,"inc":76540},{"fips":"48151","name":"Fisher County","n":544,"pov":14.9,"c017":19.3,"c517":18.0,"inc":64430},{"fips":"48153","name":"Floyd County","n":872,"pov":17.3,"c017":30.1,"c517":28.1,"inc":54212},{"fips":"48155","name":"Foard County","n":165,"pov":16.2,"c017":22.0,"c517":21.2,"inc":52717},{"fips":"48157","name":"Fort Bend County","n":73289,"pov":7.7,"c017":9.6,"c517":8.8,"inc":115538},{"fips":"48159","name":"Franklin County","n":1447,"pov":13.4,"c017":19.5,"c517":17.2,"inc":67120},{"fips":"48161","name":"Freestone County","n":2418,"pov":12.7,"c017":17.4,"c517":16.6,"inc":69048},{"fips":"48163","name":"Frio County","n":4403,"pov":27.0,"c017":37.4,"c517":37.8,"inc":51825},{"fips":"48165","name":"Gaines County","n":2775,"pov":12.2,"c017":19.8,"c517":20.2,"inc":71008},{"fips":"48167","name":"Galveston County","n":45749,"pov":12.6,"c017":16.9,"c517":15.1,"inc":86354},{"fips":"48169","name":"Garza County","n":717,"pov":17.2,"c017":23.1,"c517":22.3,"inc":57106},{"fips":"48171","name":"Gillespie County","n":2285,"pov":8.2,"c017":12.7,"c517":12.1,"inc":86869},{"fips":"48173","name":"Glasscock County","n":94,"pov":8.2,"c017":7.7,"c517":8.2,"inc":107849},{"fips":"48175","name":"Goliad County","n":1102,"pov":15.4,"c017":20.6,"c517":20.8,"inc":68784},{"fips":"48177","name":"Gonzales County","n":3551,"pov":18.0,"c017":28.8,"c517":34.8,"inc":60783},{"fips":"48179","name":"Gray County","n":2971,"pov":15.4,"c017":20.3,"c517":18.8,"inc":69749},{"fips":"48181","name":"Grayson County","n":16352,"pov":11.0,"c017":14.4,"c517":13.7,"inc":72865},{"fips":"48183","name":"Gregg County","n":19874,"pov":16.1,"c017":22.1,"c517":22.4,"inc":62490},{"fips":"48185","name":"Grimes County","n":4564,"pov":15.0,"c017":20.8,"c517":20.4,"inc":67168},{"fips":"48187","name":"Guadalupe County","n":15247,"pov":7.9,"c017":10.0,"c517":9.6,"inc":90997},{"fips":"48189","name":"Hale County","n":5533,"pov":18.6,"c017":25.2,"c517":25.9,"inc":54376},{"fips":"48191","name":"Hall County","n":617,"pov":22.1,"c017":34.9,"c517":32.6,"inc":52797},{"fips":"48193","name":"Hamilton County","n":1164,"pov":13.7,"c017":21.4,"c517":19.9,"inc":71790},{"fips":"48195","name":"Hansford County","n":548,"pov":11.1,"c017":14.1,"c517":13.1,"inc":75870},{"fips":"48197","name":"Hardeman County","n":616,"pov":18.1,"c017":26.7,"c517":27.9,"inc":53275},{"fips":"48199","name":"Hardin County","n":6282,"pov":10.8,"c017":13.8,"c517":13.2,"inc":81183},{"fips":"48201","name":"Harris County","n":827245,"pov":16.7,"c017":23.3,"c517":22.6,"inc":74682},{"fips":"48203","name":"Harrison County","n":9935,"pov":14.5,"c017":21.0,"c517":20.6,"inc":63802},{"fips":"48205","name":"Hartley County","n":379,"pov":9.2,"c017":9.8,"c517":10.4,"inc":91653},{"fips":"48207","name":"Haskell County","n":1126,"pov":22.8,"c017":29.6,"c517":29.0,"inc":52130},{"fips":"48209","name":"Hays County","n":30760,"pov":10.8,"c017":8.1,"c517":7.5,"inc":91880},{"fips":"48211","name":"Hemphill County","n":311,"pov":10.2,"c017":14.5,"c517":13.2,"inc":83011},{"fips":"48213","name":"Henderson County","n":13700,"pov":15.9,"c017":22.1,"c517":23.0,"inc":61360},{"fips":"48215","name":"Hidalgo County","n":218775,"pov":24.2,"c017":32.6,"c517":32.3,"inc":55829},{"fips":"48217","name":"Hill County","n":6003,"pov":15.7,"c017":22.0,"c517":20.7,"inc":62176},{"fips":"48219","name":"Hockley County","n":3363,"pov":15.8,"c017":22.8,"c517":20.2,"inc":64664},{"fips":"48221","name":"Hood County","n":5462,"pov":8.0,"c017":11.7,"c517":11.6,"inc":88438},{"fips":"48223","name":"Hopkins County","n":5103,"pov":13.4,"c017":17.8,"c517":17.2,"inc":71078},{"fips":"48225","name":"Houston County","n":3798,"pov":19.3,"c017":26.9,"c517":26.8,"inc":55607},{"fips":"48227","name":"Howard County","n":4375,"pov":15.4,"c017":18.6,"c517":18.1,"inc":65932},{"fips":"48229","name":"Hudspeth County","n":780,"pov":30.2,"c017":29.7,"c517":30.4,"inc":48355},{"fips":"48231","name":"Hunt County","n":12753,"pov":11.1,"c017":14.3,"c517":14.2,"inc":82770},{"fips":"48233","name":"Hutchinson County","n":2784,"pov":14.4,"c017":16.5,"c517":15.1,"inc":60073},{"fips":"48235","name":"Irion County","n":136,"pov":8.9,"c017":11.1,"c517":10.7,"inc":90589},{"fips":"48237","name":"Jack County","n":1158,"pov":14.3,"c017":16.3,"c517":15.1,"inc":67398},{"fips":"48239","name":"Jackson County","n":2124,"pov":14.3,"c017":20.3,"c517":21.5,"inc":68156},{"fips":"48241","name":"Jasper County","n":5144,"pov":15.9,"c017":23.2,"c517":22.2,"inc":62743},{"fips":"48243","name":"Jeff Davis County","n":228,"pov":12.8,"c017":15.5,"c517":21.4,"inc":67735},{"fips":"48245","name":"Jefferson County","n":50791,"pov":21.3,"c017":26.2,"c517":21.8,"inc":59997},{"fips":"48247","name":"Jim Hogg County","n":1001,"pov":22.1,"c017":33.3,"c517":31.4,"inc":48943},{"fips":"48249","name":"Jim Wells County","n":8769,"pov":22.8,"c017":33.1,"c517":31.9,"inc":55920},{"fips":"48251","name":"Johnson County","n":16340,"pov":7.9,"c017":9.5,"c517":8.9,"inc":86537},{"fips":"48253","name":"Jones County","n":3384,"pov":22.7,"c017":22.0,"c517":20.7,"inc":59076},{"fips":"48255","name":"Karnes County","n":2304,"pov":19.4,"c017":23.5,"c517":22.2,"inc":68534},{"fips":"48257","name":"Kaufman County","n":16623,"pov":8.5,"c017":12.2,"c517":12.6,"inc":90670},{"fips":"48259","name":"Kendall County","n":3314,"pov":6.5,"c017":8.5,"c517":7.8,"inc":121401},{"fips":"48261","name":"Kenedy County","n":51,"pov":15.5,"c017":15.1,"c517":12.8,"inc":46960},{"fips":"48263","name":"Kent County","n":78,"pov":11.9,"c017":15.9,"c517":14.3,"inc":64002},{"fips":"48265","name":"Kerr County","n":5832,"pov":11.2,"c017":18.4,"c517":17.7,"inc":69674},{"fips":"48267","name":"Kimble County","n":675,"pov":15.4,"c017":28.2,"c517":29.0,"inc":58887},{"fips":"48269","name":"King County","n":29,"pov":13.5,"c017":14.0,"c517":15.0,"inc":88031},{"fips":"48271","name":"Kinney County","n":568,"pov":20.7,"c017":22.8,"c517":23.2,"inc":56917},{"fips":"48273","name":"Kleberg County","n":6185,"pov":21.4,"c017":29.0,"c517":29.4,"inc":57810},{"fips":"48275","name":"Knox County","n":599,"pov":19.0,"c017":28.1,"c517":25.8,"inc":52113},{"fips":"48277","name":"Lamar County","n":8654,"pov":17.2,"c017":23.6,"c517":22.4,"inc":59226},{"fips":"48279","name":"Lamb County","n":2151,"pov":17.2,"c017":24.3,"c517":22.9,"inc":56537},{"fips":"48281","name":"Lampasas County","n":2592,"pov":11.1,"c017":16.2,"c517":15.3,"inc":77271},{"fips":"48283","name":"La Salle County","n":1412,"pov":27.3,"c017":30.0,"c517":30.7,"inc":52075},{"fips":"48285","name":"Lavaca County","n":2498,"pov":12.4,"c017":14.7,"c517":14.2,"inc":68916},{"fips":"48287","name":"Lee County","n":1996,"pov":11.0,"c017":15.4,"c517":15.4,"inc":79291},{"fips":"48289","name":"Leon County","n":2359,"pov":14.2,"c017":19.9,"c517":19.6,"inc":64146},{"fips":"48291","name":"Liberty County","n":19505,"pov":17.8,"c017":27.0,"c517":27.9,"inc":66378},{"fips":"48293","name":"Limestone County","n":3187,"pov":14.8,"c017":22.2,"c517":21.5,"inc":59502},{"fips":"48295","name":"Lipscomb County","n":380,"pov":13.4,"c017":19.9,"c517":19.0,"inc":79554},{"fips":"48297","name":"Live Oak County","n":1825,"pov":18.0,"c017":17.4,"c517":19.2,"inc":66331},{"fips":"48299","name":"Llano County","n":2701,"pov":11.8,"c017":21.8,"c517":22.1,"inc":75529},{"fips":"48301","name":"Loving County","n":3,"pov":6.3,"c017":6.7,"c517":7.7,"inc":128055},{"fips":"48303","name":"Lubbock County","n":49570,"pov":15.7,"c017":17.4,"c517":15.3,"inc":64512},{"fips":"48305","name":"Lynn County","n":818,"pov":13.9,"c017":18.6,"c517":18.0,"inc":70687},{"fips":"48307","name":"McCulloch County","n":1338,"pov":18.2,"c017":26.2,"c517":25.8,"inc":52639},{"fips":"48309","name":"McLennan County","n":42221,"pov":16.2,"c017":19.8,"c517":18.4,"inc":68096},{"fips":"48311","name":"McMullen County","n":61,"pov":10.9,"c017":14.0,"c517":16.3,"inc":77057},{"fips":"48313","name":"Madison County","n":1840,"pov":15.8,"c017":21.2,"c517":22.7,"inc":62187},{"fips":"48315","name":"Marion County","n":1991,"pov":21.0,"c017":33.0,"c517":31.9,"inc":50632},{"fips":"48317","name":"Martin County","n":626,"pov":12.1,"c017":17.6,"c517":15.9,"inc":88154},{"fips":"48319","name":"Mason County","n":447,"pov":11.2,"c017":18.7,"c517":18.4,"inc":71056},{"fips":"48321","name":"Matagorda County","n":5319,"pov":14.8,"c017":22.9,"c517":22.2,"inc":65319},{"fips":"48323","name":"Maverick County","n":12700,"pov":21.8,"c017":31.1,"c517":33.7,"inc":50787},{"fips":"48325","name":"Medina County","n":5951,"pov":11.2,"c017":15.4,"c517":14.8,"inc":96423},{"fips":"48327","name":"Menard County","n":375,"pov":20.0,"c017":32.7,"c517":31.0,"inc":56414},{"fips":"48329","name":"Midland County","n":20415,"pov":11.2,"c017":14.3,"c517":13.2,"inc":97719},{"fips":"48331","name":"Milam County","n":3542,"pov":13.8,"c017":19.9,"c517":20.5,"inc":72798},{"fips":"48333","name":"Mills County","n":595,"pov":13.6,"c017":23.4,"c517":21.7,"inc":61642},{"fips":"48335","name":"Mitchell County","n":1493,"pov":22.1,"c017":24.4,"c517":23.9,"inc":59370},{"fips":"48337","name":"Montague County","n":2904,"pov":13.4,"c017":15.6,"c517":15.1,"inc":64975},{"fips":"48339","name":"Montgomery County","n":67480,"pov":9.1,"c017":10.5,"c517":9.3,"inc":96049},{"fips":"48341","name":"Moore County","n":2974,"pov":13.7,"c017":18.3,"c517":19.0,"inc":66411},{"fips":"48343","name":"Morris County","n":2292,"pov":19.0,"c017":30.6,"c517":28.5,"inc":54697},{"fips":"48345","name":"Motley County","n":196,"pov":19.4,"c017":34.0,"c517":36.5,"inc":52542},{"fips":"48347","name":"Nacogdoches County","n":13359,"pov":21.9,"c017":30.4,"c517":24.8,"inc":55767},{"fips":"48349","name":"Navarro County","n":8018,"pov":14.5,"c017":19.5,"c517":19.2,"inc":66263},{"fips":"48351","name":"Newton County","n":2076,"pov":17.5,"c017":25.2,"c517":24.8,"inc":55560},{"fips":"48353","name":"Nolan County","n":2733,"pov":19.7,"c017":26.7,"c517":26.1,"inc":57566},{"fips":"48355","name":"Nueces County","n":52973,"pov":15.3,"c017":21.3,"c517":19.7,"inc":66726},{"fips":"48357","name":"Ochiltree County","n":1098,"pov":11.4,"c017":15.9,"c517":15.3,"inc":77359},{"fips":"48359","name":"Oldham County","n":209,"pov":12.7,"c017":25.6,"c517":24.5,"inc":77346},{"fips":"48361","name":"Orange County","n":11815,"pov":13.8,"c017":18.1,"c517":16.0,"inc":72841},{"fips":"48363","name":"Palo Pinto County","n":4787,"pov":16.0,"c017":22.6,"c517":22.7,"inc":63004},{"fips":"48365","name":"Panola County","n":3009,"pov":13.3,"c017":18.6,"c517":16.5,"inc":68559},{"fips":"48367","name":"Parker County","n":14183,"pov":8.0,"c017":8.6,"c517":8.1,"inc":101485},{"fips":"48369","name":"Parmer County","n":1209,"pov":12.7,"c017":17.8,"c517":17.6,"inc":68598},{"fips":"48371","name":"Pecos County","n":2211,"pov":17.3,"c017":22.2,"c517":21.0,"inc":64808},{"fips":"48373","name":"Polk County","n":7284,"pov":14.5,"c017":21.9,"c517":21.1,"inc":65522},{"fips":"48375","name":"Potter County","n":24268,"pov":22.5,"c017":32.3,"c517":30.8,"inc":53656},{"fips":"48377","name":"Presidio County","n":1112,"pov":19.8,"c017":30.6,"c517":31.1,"inc":49703},{"fips":"48379","name":"Rains County","n":1485,"pov":11.2,"c017":18.9,"c517":17.8,"inc":66146},{"fips":"48381","name":"Randall County","n":15370,"pov":10.4,"c017":12.1,"c517":12.0,"inc":83677},{"fips":"48383","name":"Reagan County","n":313,"pov":10.1,"c017":12.5,"c517":12.5,"inc":72105},{"fips":"48385","name":"Real County","n":405,"pov":15.1,"c017":28.7,"c517":32.0,"inc":57066},{"fips":"48387","name":"Red River County","n":1731,"pov":15.0,"c017":24.5,"c517":22.8,"inc":52978},{"fips":"48389","name":"Reeves County","n":1933,"pov":16.8,"c017":21.1,"c517":19.9,"inc":63822},{"fips":"48391","name":"Refugio County","n":1010,"pov":15.2,"c017":23.4,"c517":22.9,"inc":68639},{"fips":"48393","name":"Roberts County","n":72,"pov":8.6,"c017":10.3,"c517":9.5,"inc":87615},{"fips":"48395","name":"Robertson County","n":2744,"pov":15.7,"c017":21.8,"c517":22.2,"inc":61886},{"fips":"48397","name":"Rockwall County","n":7514,"pov":5.5,"c017":6.9,"c517":6.7,"inc":120317},{"fips":"48399","name":"Runnels County","n":1697,"pov":17.8,"c017":28.8,"c517":33.4,"inc":57607},{"fips":"48401","name":"Rusk County","n":6865,"pov":14.1,"c017":17.8,"c517":16.9,"inc":67655},{"fips":"48403","name":"Sabine County","n":1580,"pov":15.9,"c017":27.5,"c517":28.4,"inc":55457},{"fips":"48405","name":"San Augustine County","n":1539,"pov":20.4,"c017":31.6,"c517":30.9,"inc":50976},{"fips":"48407","name":"San Jacinto County","n":4893,"pov":16.8,"c017":25.0,"c517":24.8,"inc":62182},{"fips":"48409","name":"San Patricio County","n":10153,"pov":14.3,"c017":20.3,"c517":20.3,"inc":69930},{"fips":"48411","name":"San Saba County","n":773,"pov":15.0,"c017":23.5,"c517":23.3,"inc":58628},{"fips":"48413","name":"Schleicher County","n":348,"pov":15.4,"c017":24.0,"c517":22.5,"inc":68029},{"fips":"48415","name":"Scurry County","n":2297,"pov":15.1,"c017":20.8,"c517":19.6,"inc":68306},{"fips":"48417","name":"Shackelford County","n":378,"pov":12.1,"c017":15.3,"c517":15.1,"inc":72833},{"fips":"48419","name":"Shelby County","n":3872,"pov":16.2,"c017":23.1,"c517":23.1,"inc":58737},{"fips":"48421","name":"Sherman County","n":330,"pov":12.1,"c017":17.2,"c517":17.3,"inc":70998},{"fips":"48423","name":"Smith County","n":29486,"pov":12.1,"c017":17.5,"c517":17.9,"inc":75620},{"fips":"48425","name":"Somervell County","n":967,"pov":9.7,"c017":11.9,"c517":12.1,"inc":82779},{"fips":"48427","name":"Starr County","n":23381,"pov":35.4,"c017":44.1,"c517":44.7,"inc":37375},{"fips":"48429","name":"Stephens County","n":1513,"pov":17.7,"c017":25.0,"c517":23.7,"inc":57983},{"fips":"48431","name":"Sterling County","n":146,"pov":10.8,"c017":13.0,"c517":12.8,"inc":87739},{"fips":"48433","name":"Stonewall County","n":194,"pov":16.5,"c017":23.2,"c517":22.3,"inc":61799},{"fips":"48435","name":"Sutton County","n":402,"pov":12.3,"c017":17.1,"c517":15.9,"inc":72161},{"fips":"48437","name":"Swisher County","n":1447,"pov":23.2,"c017":31.3,"c517":29.9,"inc":60199},{"fips":"48439","name":"Tarrant County","n":252680,"pov":11.5,"c017":15.0,"c517":14.9,"inc":85208},{"fips":"48441","name":"Taylor County","n":21200,"pov":14.8,"c017":18.9,"c517":18.2,"inc":64490},{"fips":"48443","name":"Terrell County","n":134,"pov":18.7,"c017":25.7,"c517":23.1,"inc":52891},{"fips":"48445","name":"Terry County","n":2172,"pov":19.8,"c017":28.7,"c517":28.8,"inc":52129},{"fips":"48447","name":"Throckmorton County","n":215,"pov":14.1,"c017":21.4,"c517":21.0,"inc":56961},{"fips":"48449","name":"Titus County","n":4666,"pov":15.0,"c017":21.1,"c517":19.5,"inc":61204},{"fips":"48451","name":"Tom Green County","n":13448,"pov":11.5,"c017":15.2,"c517":14.6,"inc":69148},{"fips":"48453","name":"Travis County","n":141303,"pov":10.5,"c017":13.1,"c517":13.0,"inc":97487},{"fips":"48455","name":"Trinity County","n":2414,"pov":16.8,"c017":24.6,"c517":23.3,"inc":53638},{"fips":"48457","name":"Tyler County","n":2964,"pov":16.3,"c017":21.0,"c517":20.6,"inc":60052},{"fips":"48459","name":"Upshur County","n":5958,"pov":13.7,"c017":19.3,"c517":18.1,"inc":69431},{"fips":"48461","name":"Upton County","n":410,"pov":13.4,"c017":17.6,"c517":16.6,"inc":75021},{"fips":"48463","name":"Uvalde County","n":4726,"pov":19.5,"c017":28.8,"c517":29.0,"inc":53955},{"fips":"48465","name":"Val Verde County","n":8301,"pov":18.1,"c017":21.5,"c517":22.0,"inc":61751},{"fips":"48467","name":"Van Zandt County","n":8416,"pov":13.0,"c017":17.4,"c517":16.7,"inc":67538},{"fips":"48469","name":"Victoria County","n":12940,"pov":14.3,"c017":19.8,"c517":20.6,"inc":67704},{"fips":"48471","name":"Walker County","n":14596,"pov":23.3,"c017":21.3,"c517":21.6,"inc":58095},{"fips":"48473","name":"Waller County","n":7999,"pov":13.6,"c017":16.3,"c517":16.0,"inc":83520},{"fips":"48475","name":"Ward County","n":1478,"pov":13.6,"c017":18.1,"c517":18.5,"inc":72414},{"fips":"48477","name":"Washington County","n":4393,"pov":12.4,"c017":18.3,"c517":17.8,"inc":73738},{"fips":"48479","name":"Webb County","n":55356,"pov":20.6,"c017":29.9,"c517":28.0,"inc":58736},{"fips":"48481","name":"Wharton County","n":6055,"pov":14.6,"c017":20.5,"c517":18.9,"inc":61887},{"fips":"48483","name":"Wheeler County","n":641,"pov":13.5,"c017":17.9,"c517":16.1,"inc":58692},{"fips":"48485","name":"Wichita County","n":17033,"pov":14.4,"c017":18.1,"c517":14.4,"inc":65480},{"fips":"48487","name":"Wilbarger County","n":1803,"pov":14.9,"c017":20.6,"c517":20.3,"inc":56755},{"fips":"48489","name":"Willacy County","n":4176,"pov":24.2,"c017":32.8,"c517":32.2,"inc":46616},{"fips":"48491","name":"Williamson County","n":39166,"pov":5.4,"c017":5.9,"c517":5.0,"inc":113487},{"fips":"48493","name":"Wilson County","n":5108,"pov":9.3,"c017":10.6,"c517":10.0,"inc":97327},{"fips":"48495","name":"Winkler County","n":1041,"pov":14.3,"c017":18.4,"c517":17.9,"inc":73437},{"fips":"48497","name":"Wise County","n":6469,"pov":8.1,"c017":10.7,"c517":10.1,"inc":96255},{"fips":"48499","name":"Wood County","n":6489,"pov":13.7,"c017":19.0,"c517":18.3,"inc":63102},{"fips":"48501","name":"Yoakum County","n":947,"pov":12.6,"c017":17.0,"c517":17.1,"inc":75871},{"fips":"48503","name":"Young County","n":2466,"pov":13.7,"c017":18.4,"c517":17.1,"inc":66213},{"fips":"48505","name":"Zapata County","n":4224,"pov":30.9,"c017":44.4,"c517":44.1,"inc":43517},{"fips":"48507","name":"Zavala County","n":2347,"pov":25.7,"c017":36.1,"c517":36.1,"inc":41554}];
+const TOPO_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/counties-10m.json";
+const W = 900, H = 860, N = DATA.length;
+const RATE = ["#E8F1F0","#BFDDDA","#86BDBE","#4A93A5","#2C6283","#2A3361"];
+const INC  = ["#F4F1DC","#E0E3A8","#B5D083","#7DB36B","#438A5E","#1F5E4C"];
+const money = v => "$" + d3.format(",")(v);
+const METRICS = {
+  pov:  {tab:"All ages",     label:"Poverty rate, all ages",        fmt:v=>v.toFixed(1)+"%", lg:v=>v.toFixed(1), colors:RATE, list:"Highest poverty rate", dir:-1},
+  c017: {tab:"Ages 0–17",    label:"Child poverty rate, ages 0–17", fmt:v=>v.toFixed(1)+"%", lg:v=>v.toFixed(1), colors:RATE, list:"Highest child poverty", dir:-1},
+  c517: {tab:"Ages 5–17",    label:"Poverty rate, ages 5–17 in families", fmt:v=>v.toFixed(1)+"%", lg:v=>v.toFixed(1), colors:RATE, list:"Highest poverty, ages 5–17", dir:-1},
+  inc:  {tab:"Median income",label:"Median household income",       fmt:money, lg:d3.format("$.2s"), colors:INC, list:"Lowest median income", dir:1}
+};
+const KEYS = Object.keys(METRICS);
+const byFips = new Map(DATA.map(d => [d.fips, d]));
+const scales = {}, med = {}, rank = {};
+KEYS.forEach(k => {
+  const vals = DATA.map(d => d[k]);
+  scales[k] = d3.scaleQuantile().domain(vals).range(METRICS[k].colors);
+  med[k] = d3.median(vals);
+  rank[k] = new Map([...DATA].sort((a,b) => b[k]-a[k]).map((d,i) => [d.fips, i+1]));
+});
+const ord = n => { const s=["th","st","nd","rd"], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+const DUR = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 450;
+let metric = "pov", selected = null;
+
+const svg = d3.select("#map"), tip = d3.select("#tip");
+const g = svg.append("g"), gC = g.append("g"), gB = g.append("g"), gD = g.append("g");
+let counties, dots, featById, path, k = 1;
+const zoom = d3.zoom().scaleExtent([1, 12]).translateExtent([[0,0],[W,H]]).on("zoom", e => {
+  g.attr("transform", e.transform); k = e.transform.k; dots && dots.attr("r", 3.4 / k);
+});
+svg.call(zoom);
+
+const tabs = d3.select("#tabs");
+KEYS.forEach(key => tabs.append("button").attr("type","button").attr("data-k",key).text(METRICS[key].tab).on("click", () => setMetric(key)));
+
+function fillFor(f){ const r = byFips.get(f.id); return r ? scales[metric](r[metric]) : "#ccc"; }
+
+function setMetric(key){
+  metric = key; const m = METRICS[key];
+  tabs.selectAll("button").attr("aria-pressed", function(){ return this.dataset.k === key; });
+  d3.select("#measure").text(m.label);
+  if (counties) counties.transition().duration(DUR).attr("fill", fillFor);
+  const q = scales[key].quantiles(), ext = d3.extent(DATA, d => d[key]);
+  const labels = [ext[0], ...q, ext[1]].map(m.lg);
+  d3.select("#legend").html(
+    '<div class="sw">' + m.colors.map(c => `<i style="background:${c}"></i>`).join("") + '</div>' +
+    '<div class="lb">' + labels.map(l => `<span>${l}</span>`).join("") + '</div>');
+  const sorted = [...DATA].sort((a,b) => m.dir === -1 ? b[key]-a[key] : a[key]-b[key]).slice(0,10);
+  d3.select("#listTitle").text(m.list);
+  d3.select("#list").html("").selectAll("li").data(sorted).join("li").append("button").attr("type","button")
+    .html(d => `<span>${d.name}</span><b>${m.fmt(d[key])}</b>`).on("click", (e,d) => select(d.fips, true));
+  if (selected) showDetail(byFips.get(selected));
+}
+
+function showDetail(d){
+  const rows = KEYS.map(key => {
+    const m = METRICS[key], r = rank[key].get(d.fips), pct = 100 * (N - r) / (N - 1);
+    return `<div class="row"><div class="rl">${m.label}</div><div class="rv">${m.fmt(d[key])}</div>
+      <div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      <div class="rk">${ord(r)} highest of ${N} counties · county median ${m.fmt(med[key])}</div></div>`;
+  }).join("");
+  d3.select("#detail").html(`<h2>${d.name}</h2><div class="rl">People in poverty, all ages</div><div class="rv" style="margin-bottom:6px">${d3.format(",")(d.n)}</div>${rows}`);
+}
+
+function select(id, doZoom){
+  selected = id;
+  counties.classed("sel", f => f.id === id).filter(f => f.id === id).raise();
+  dots.classed("sel", f => f.id === id);
+  showDetail(byFips.get(id));
+  if (doZoom) {
+    const f = featById.get(id), [[x0,y0],[x1,y1]] = path.bounds(f);
+    const s = Math.min(8, 0.8 / Math.max((x1-x0)/W, (y1-y0)/H));
+    svg.transition().duration(DUR).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s).translate(-(x0+x1)/2, -(y0+y1)/2));
+  }
+}
+
+d3.select("#reset").on("click", () => svg.transition().duration(DUR).call(zoom.transform, d3.zoomIdentity));
+d3.select("#names").selectAll("option").data(DATA).join("option").attr("value", d => d.name);
+d3.select("#q").on("change", function(){
+  const d = DATA.find(x => x.name.toLowerCase() === this.value.trim().toLowerCase()) ||
+            DATA.find(x => x.name.toLowerCase().startsWith(this.value.trim().toLowerCase()));
+  if (d) { select(d.fips, true); this.value = d.name; }
+});
+
+function move(e){ tip.style("left", (e.clientX + 14) + "px").style("top", (e.clientY + 14) + "px"); }
+function over(e, f){ const d = byFips.get(f.id); if (!d) return;
+  tip.style("display","block").html(`<b>${d.name}</b><br>${METRICS[metric].fmt(d[metric])}`); move(e); }
+
+setMetric("pov");
+d3.json(TOPO_URL).then(topo => {
+  const all = topojson.feature(topo, topo.objects.counties).features.filter(f => String(f.id).startsWith("48"));
+  featById = new Map(all.map(f => [String(f.id), f]));
+  all.forEach(f => f.id = String(f.id));
+  const proj = d3.geoConicEqualArea().parallels([27.5, 35]).rotate([100, 0])
+    .fitExtent([[12,12],[W-12,H-12]], {type:"FeatureCollection", features: all});
+  path = d3.geoPath(proj);
+  counties = gC.selectAll("path").data(all).join("path").attr("class","county").attr("d", path).attr("fill", fillFor)
+    .on("mouseover", over).on("mousemove", move).on("mouseout", () => tip.style("display","none"))
+    .on("click", (e,f) => select(f.id, false));
+  gB.append("path").attr("class","border")
+    .attr("d", path(topojson.mesh(topo, topo.objects.states, (a,b) => a === b && String(a.id) === "48")));
+  dots = gD.selectAll("circle").data(all.filter(f => byFips.has(f.id))).join("circle").attr("class","dot")
+    .attr("cx", f => path.centroid(f)[0]).attr("cy", f => path.centroid(f)[1]).attr("r", 3.4)
+    .on("mouseover", over).on("mousemove", move).on("mouseout", () => tip.style("display","none"))
+    .on("click", (e,f) => select(f.id, false));
+}).catch(err => {
+  d3.select("#measure").text("Couldn't load the county boundaries. Check your internet connection and reload.");
+  console.error(err);
+});
+</script>
+</body>
+</html>
