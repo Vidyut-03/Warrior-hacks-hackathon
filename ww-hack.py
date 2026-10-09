@@ -1,19 +1,15 @@
 from pathlib import Path
 import pandas as pd
 
+
+
+excel_file = Path(__file__).with_name("est24all.xls")
 """1. Converts Excel to Pd Dataframe
    2. header=3 uses the 4th row as the names for the columns.
    3. dtype=str just reads everything as a string.
    4. engine=xlrd is used to open .xls file."""
-excel_file = Path(__file__).with_name("est24all.xls")
-csv_file = Path(__file__).with_name("est24all.csv")
-
-# Convert the downloaded Excel file to CSV
-excel_df = pd.read_excel(excel_file, header=3, dtype=str, engine="xlrd")
-excel_df.to_csv(csv_file, index=False)
-excel_df.to_csv("csv_raw_file.csv", index=False)
-# Read the CSV; use df for the rest of your code
-df = pd.read_csv(csv_file, dtype=str)
+df = pd.read_excel(excel_file, header=3, dtype=str, engine="xlrd")
+df.to_csv("excel_file.csv", index=False)
 df.columns = [
     "state_fips",
     "county_fips",
@@ -99,3 +95,4 @@ df_texas_counties = df_texas_counties.drop(columns=[
 print(f"Texas county rows: {len(df_texas_counties)}")
 print(df_texas_counties.to_string(index=False))
 df_texas_counties.to_csv("texas_counties.csv", index=False)
+
