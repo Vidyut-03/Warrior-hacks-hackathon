@@ -1,0 +1,9 @@
+HOW TO RUN
+
+1. Install Python if you don't already have it.
+2. Open a terminal in this folder.
+3. Install the packages by running:
+   python -m pip install pandas xlrd
+4. Make sure est24all.xls is in this folder.
+5. Run the script:
+   python ww-hack.py
