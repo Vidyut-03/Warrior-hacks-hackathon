@@ -1,5 +1,8 @@
+import json
 from pathlib import Path
+
 import pandas as pd
+from flask import Flask, render_template
 
 
 
@@ -9,7 +12,8 @@ excel_file = Path(__file__).with_name("est24all.xls")
    3. dtype=str just reads everything as a string.
    4. engine=xlrd is used to open .xls file."""
 df = pd.read_excel(excel_file, header=3, dtype=str, engine="xlrd")
-df.to_csv("excel_file.csv", index=False)
+excel_csv = Path(__file__).with_name("excel_file.csv")
+df.to_csv(excel_csv, index=False)
 df.columns = [
     "state_fips",
     "county_fips",
@@ -59,6 +63,23 @@ for column in df_texas_counties.columns:
             df_texas_counties[column].str.replace(",", "", regex=False),
             errors="coerce",
         )
+
+# Create the compact dataset used by the Flask choropleth page.
+map_data = pd.DataFrame({
+    "fips": (
+        df_texas_counties["state_fips"].str.strip().str.zfill(2)
+        + df_texas_counties["county_fips"].str.strip().str.zfill(3)
+    ),
+    "name": df_texas_counties["county"],
+    "n": df_texas_counties["people_in_poverty"],
+    "pov": df_texas_counties["poverty_rate_pct"],
+    "c017": df_texas_counties["children_0_17_poverty_rate_pct"],
+    "c517": df_texas_counties["children_5_17_poverty_rate_pct"],
+    "inc": df_texas_counties["median_household_income_usd"],
+})
+map_data_file = Path(__file__).with_name("choropleth_data.json")
+map_data_file.write_text(map_data.to_json(orient="records"), encoding="utf-8")
+
 # Save all Texas county estimates to a spreadsheet-friendly CSV.
 #output_file = Path(__file__).with_name("texas_counties.csv")
 #df_texas_counties.to_csv(output_file, index=False)
@@ -94,5 +115,19 @@ df_texas_counties = df_texas_counties.drop(columns=[
 
 print(f"Texas county rows: {len(df_texas_counties)}")
 print(df_texas_counties.to_string(index=False))
-df_texas_counties.to_csv("texas_counties.csv", index=False)
+texas_csv = Path(__file__).with_name("texas_counties.csv")
+df_texas_counties.to_csv(texas_csv, index=False)
+
+# Flask serves the map page and injects the county data created above.
+app = Flask(__name__, template_folder=str(Path(__file__).resolve().parent))
+
+
+@app.route("/")
+def show_choropleth():
+    records = json.loads(map_data.to_json(orient="records"))
+    return render_template("choropleth.html", map_data=records)
+
+
+if __name__ == "__main__":
+    app.run(debug=True, use_reloader=False)
 
